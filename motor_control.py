@@ -10,6 +10,7 @@ from threading import Thread
 import traceback
 import json
 import os
+from typing import Tuple, List, Optional
 
 # Constants
 SERVO_PIN = 18
@@ -42,7 +43,7 @@ controller = pygame.joystick.Joystick(0)
 controller.init()
 
 # Initialize Serial for GPS and Motor controller
-def init_serial(port, baudrate=9600, timeout=1):
+def init_serial(port: str, baudrate: int = 9600, timeout: int = 1) -> Optional[serial.Serial]:
     try:
         return serial.Serial(port, baudrate, timeout=timeout)
     except serial.SerialException as e:
@@ -55,8 +56,8 @@ motor_serial = init_serial(MOTOR_SERIAL_PORT)
 # Mapping variables
 mapping_mode = False
 obstacle_mode = False
-current_position = (0.0, 0.0)
-grid = [[0 for _ in range(GRID_SIZE)] for _ in range(GRID_SIZE)]
+current_position: Tuple[float, float] = (0.0, 0.0)
+grid: List[List[int]] = [[0 for _ in range(GRID_SIZE)] for _ in range(GRID_SIZE)]
 emergency_stop = False
 gps_status = "Disconnected"
 motor_status = "Disconnected"
@@ -64,7 +65,7 @@ signal_quality = 0
 current_grid_file = 'default_grid.json'
 
 # Load grid data from file
-def load_grid(file_name):
+def load_grid(file_name: str) -> None:
     global grid, current_grid_file
     try:
         if os.path.exists(file_name):
@@ -80,7 +81,7 @@ def load_grid(file_name):
         messagebox.showerror("Load Grid", f"Error loading grid file {file_name}: {e}")
 
 # Save grid data to file
-def save_grid(file_name):
+def save_grid(file_name: str) -> None:
     try:
         with open(file_name, 'w') as file:
             json.dump(grid, file)
@@ -93,7 +94,7 @@ load_grid(current_grid_file)
 
 # GUI setup
 class GPSApp:
-    def __init__(self, root):
+    def __init__(self, root: tk.Tk) -> None:
         self.root = root
         self.root.title("GPS Monitor")
         self.lat_label = tk.Label(root, text="Latitude: 0.0")
@@ -120,7 +121,7 @@ class GPSApp:
         self.legend.pack()
         self.update_gui()
 
-    def draw_grid(self):
+    def draw_grid(self) -> None:
         self.canvas.delete("all")
         for y in range(GRID_SIZE):
             for x in range(GRID_SIZE):
@@ -129,7 +130,7 @@ class GPSApp:
                 elif grid[y][x] == -1:  # Obstacle
                     self.canvas.create_rectangle(x*5, y*5, (x+1)*5, (y+1)*5, fill="red")
 
-    def update_gui(self):
+    def update_gui(self) -> None:
         self.lat_label.config(text=f"Latitude: {current_position[0]:.6f}")
         self.lon_label.config(text=f"Longitude: {current_position[1]:.6f}")
         self.gps_status_label.config(text=f"GPS Status: {gps_status}")
@@ -140,19 +141,19 @@ class GPSApp:
         self.draw_grid()
         self.root.after(1000, self.update_gui)
 
-    def save_grid(self):
+    def save_grid(self) -> None:
         file_name = simpledialog.askstring("Save Grid", "Enter file name:")
         if file_name:
             save_grid(file_name + ".json")
             messagebox.showinfo("Save Grid", f"Grid data saved to {file_name}.json")
 
-    def load_grid(self):
+    def load_grid(self) -> None:
         file_name = simpledialog.askstring("Load Grid", "Enter file name:")
         if file_name:
             load_grid(file_name + ".json")
             messagebox.showinfo("Load Grid", f"Grid data loaded from {file_name}.json")
 
-def start_gui():
+def start_gui() -> None:
     root = tk.Tk()
     app = GPSApp(root)
     root.mainloop()
@@ -160,7 +161,7 @@ def start_gui():
 gui_thread = Thread(target=start_gui)
 gui_thread.start()
 
-def update_motor_control(left_speed, right_speed):
+def update_motor_control(left_speed: float, right_speed: float) -> None:
     try:
         motor_serial.write(f'L{left_speed}R{right_speed}\n'.encode())
         logging.info(f'Motor control updated: L={left_speed}, R={right_speed}')
@@ -169,7 +170,7 @@ def update_motor_control(left_speed, right_speed):
         logging.error(traceback.format_exc())
         reconnect_motor()
 
-def update_gps_position():
+def update_gps_position() -> None:
     global current_position, gps_status, signal_quality
     try:
         line = gps_serial.readline().decode('utf-8')
@@ -188,7 +189,7 @@ def update_gps_position():
         gps_status = "Disconnected"
         reconnect_gps()
 
-def reconnect_gps():
+def reconnect_gps() -> None:
     global gps_serial
     logging.info("Attempting to reconnect GPS...")
     gps_serial = init_serial(GPS_SERIAL_PORT)
@@ -198,7 +199,7 @@ def reconnect_gps():
     else:
         gps_status = "Disconnected"
 
-def reconnect_motor():
+def reconnect_motor() -> None:
     global motor_serial
     logging.info("Attempting to reconnect motor controller...")
     motor_serial = init_serial(MOTOR_SERIAL_PORT)
@@ -208,7 +209,7 @@ def reconnect_motor():
     else:
         motor_status = "Disconnected"
 
-def handle_buttons():
+def handle_buttons() -> None:
     global mapping_mode, obstacle_mode, emergency_stop
     for event in pygame.event.get():
         if event.type == pygame.JOYBUTTONDOWN:
@@ -227,7 +228,7 @@ def handle_buttons():
             elif event.button == 3:  # Y button
                 toggle_mower()
 
-def stop_and_backup():
+def stop_and_backup() -> None:
     logging.info("Stopping and backing up")
     update_motor_control(0, 0)
     time.sleep(1)
@@ -235,13 +236,13 @@ def stop_and_backup():
     time.sleep(BACKUP_DISTANCE / 2.0)
     update_motor_control(0, 0)
 
-def toggle_mower():
+def toggle_mower() -> None:
     logging.info("Toggling mower")
     servo.ChangeDutyCycle(SERVO_ON)
     time.sleep(1)
     servo.ChangeDutyCycle(SERVO_OFF)
 
-def main():
+def main() -> None:
     global motor_status, gps_status
     while True:
         handle_buttons()
@@ -286,4 +287,3 @@ if __name__ == "__main__":
         if motor_serial:
             motor_serial.close()
         pygame.quit()
-
