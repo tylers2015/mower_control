@@ -15,7 +15,7 @@ import os
 SERVO_PIN = 18
 BACKUP_DISTANCE = 2  # feet
 GPS_SERIAL_PORT = '/dev/ttyUSB0'  # Path for corrected GPS data
-MOTOR_SERIAL_PORT = '/dev/ttyUSB1'  # Path for motor controller
+MOTOR_SERIAL_PORT = '/dev/ttyAMA1'  # Path for motor controller via UART
 SERVO_ON = 7.5  # Duty cycle to turn on servo
 SERVO_OFF = 0  # Duty cycle to turn off servo
 EMERGENCY_STOP_BUTTON = 4  # Designated button for emergency stop
@@ -160,10 +160,10 @@ def start_gui():
 gui_thread = Thread(target=start_gui)
 gui_thread.start()
 
-def update_motor_control(x, y):
+def update_motor_control(left_speed, right_speed):
     try:
-        motor_serial.write(f'X{x}Y{y}\n'.encode())
-        logging.info(f'Motor control updated: X={x}, Y={y}')
+        motor_serial.write(f'L{left_speed}R{right_speed}\n'.encode())
+        logging.info(f'Motor control updated: L={left_speed}, R={right_speed}')
     except (serial.SerialException, AttributeError) as e:
         logging.error(f"Error sending motor control data: {e}")
         logging.error(traceback.format_exc())
@@ -248,9 +248,9 @@ def main():
         if emergency_stop:
             logging.warning("Emergency stop is active, stopping operations.")
             continue
-        x = controller.get_axis(0)
-        y = controller.get_axis(1)
-        update_motor_control(x, y)
+        left_speed = controller.get_axis(1)
+        right_speed = controller.get_axis(3)
+        update_motor_control(left_speed, right_speed)
         update_gps_position()
         if motor_serial:
             motor_status = "Connected"
@@ -286,3 +286,4 @@ if __name__ == "__main__":
         if motor_serial:
             motor_serial.close()
         pygame.quit()
+
