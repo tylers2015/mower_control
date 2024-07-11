@@ -217,4 +217,3 @@ def reconnect_motor() -> None:
 def handle_buttons() -> None:
     global mapping_mode, obstacle_mode, emergency_stop
     for event in pygame.event.get():
-       
