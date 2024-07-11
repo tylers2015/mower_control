@@ -19,7 +19,7 @@ GPS_SERIAL_PORT = '/dev/ttyUSB0'  # Path for corrected GPS data
 MOTOR_SERIAL_PORT = '/dev/ttyAMA1'  # Path for motor controller via UART
 SERVO_ON = 7.5  # Duty cycle to turn on servo
 SERVO_OFF = 0  # Duty cycle to turn off servo
-EMERGENCY_STOP_BUTTON = 4  # Designated button for emergency stop
+EMERGENCY_STOP_BUTTON = 7  # Designated button for emergency stop (Xbox button)
 LOG_FILE = 'gps_data.log'
 GRID_SIZE = 100
 
@@ -39,6 +39,11 @@ servo.start(0)
 # Initialize Pygame for Xbox controller
 pygame.init()
 pygame.joystick.init()
+
+# Ensure at least one joystick is connected
+if pygame.joystick.get_count() < 1:
+    raise Exception("No joystick connected")
+
 controller = pygame.joystick.Joystick(0)
 controller.init()
 
@@ -126,9 +131,9 @@ class GPSApp:
         for y in range(GRID_SIZE):
             for x in range(GRID_SIZE):
                 if grid[y][x] == 1:  # Path
-                    self.canvas.create_rectangle(x*5, y*5, (x+1)*5, (y+1)*5, fill="blue")
+                    self.canvas.create_rectangle(x * 5, y * 5, (x + 1) * 5, (y + 1) * 5, fill="blue")
                 elif grid[y][x] == -1:  # Obstacle
-                    self.canvas.create_rectangle(x*5, y*5, (x+1)*5, (y+1)*5, fill="red")
+                    self.canvas.create_rectangle(x * 5, y * 5, (x + 1) * 5, (y + 1) * 5, fill="red")
 
     def update_gui(self) -> None:
         self.lat_label.config(text=f"Latitude: {current_position[0]:.6f}")
@@ -212,78 +217,4 @@ def reconnect_motor() -> None:
 def handle_buttons() -> None:
     global mapping_mode, obstacle_mode, emergency_stop
     for event in pygame.event.get():
-        if event.type == pygame.JOYBUTTONDOWN:
-            if event.button == EMERGENCY_STOP_BUTTON:  # Emergency stop
-                emergency_stop = True
-                update_motor_control(0, 0)
-                logging.warning("Emergency stop activated!")
-            elif event.button == 0:  # A button
-                mapping_mode = not mapping_mode
-                logging.info(f"Mapping mode: {mapping_mode}")
-            elif event.button == 1:  # B button
-                obstacle_mode = not obstacle_mode
-                logging.info(f"Obstacle mode: {obstacle_mode}")
-            elif event.button == 2:  # X button
-                stop_and_backup()
-            elif event.button == 3:  # Y button
-                toggle_mower()
-
-def stop_and_backup() -> None:
-    logging.info("Stopping and backing up")
-    update_motor_control(0, 0)
-    time.sleep(1)
-    update_motor_control(-1, -1)
-    time.sleep(BACKUP_DISTANCE / 2.0)
-    update_motor_control(0, 0)
-
-def toggle_mower() -> None:
-    logging.info("Toggling mower")
-    servo.ChangeDutyCycle(SERVO_ON)
-    time.sleep(1)
-    servo.ChangeDutyCycle(SERVO_OFF)
-
-def main() -> None:
-    global motor_status, gps_status
-    while True:
-        handle_buttons()
-        if emergency_stop:
-            logging.warning("Emergency stop is active, stopping operations.")
-            continue
-        left_speed = controller.get_axis(1)
-        right_speed = controller.get_axis(3)
-        update_motor_control(left_speed, right_speed)
-        update_gps_position()
-        if motor_serial:
-            motor_status = "Connected"
-        else:
-            motor_status = "Disconnected"
-        if gps_serial:
-            gps_status = "Connected"
-        else:
-            gps_status = "Disconnected"
-        if mapping_mode:
-            try:
-                grid[int(current_position[0]) % GRID_SIZE][int(current_position[1]) % GRID_SIZE] = 1
-            except IndexError:
-                logging.error("GPS coordinates out of grid bounds")
-        if obstacle_mode:
-            try:
-                grid[int(current_position[0]) % GRID_SIZE][int(current_position[1]) % GRID_SIZE] = -1
-            except IndexError:
-                logging.error("GPS coordinates out of grid bounds")
-        time.sleep(0.1)
-
-if __name__ == "__main__":
-    try:
-        main()
-    except KeyboardInterrupt:
-        logging.info("Exiting program")
-    finally:
-        save_grid(current_grid_file)
-        servo.stop()
-        GPIO.cleanup()
-        if gps_serial:
-            gps_serial.close()
-        if motor_serial:
-            motor_serial.close()
-        pygame.quit()
+       
