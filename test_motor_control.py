@@ -11,7 +11,7 @@ from mower_control import (
     SERVO_PIN, init_serial, load_grid, save_grid, update_motor_control,
     update_gps_position, reconnect_gps, reconnect_motor, handle_buttons,
     GRID_SIZE, GPS_SERIAL_PORT, MOTOR_SERIAL_PORT, gps_serial, motor_serial,
-    current_position
+    current_position, gps_status, motor_status
 )
 
 class TestLawnMower(unittest.TestCase):
@@ -105,6 +105,27 @@ class TestLawnMower(unittest.TestCase):
 
         handle_buttons()
         mock_update_motor_control.assert_called_with(0, 0)
+
+    @patch('mower_control.gps_serial.readline')
+    def test_invalid_gps_data(self, mock_readline):
+        mock_readline.return_value = b'Invalid NMEA sentence\n'
+        update_gps_position()
+        self.assertEqual(gps_status, "Disconnected")
+
+    @patch('mower_control.pygame.joystick.Joystick')
+    @patch('mower_control.pygame.joystick.get_count')
+    def test_joystick_disconnection(self, mock_get_count, mock_joystick):
+        mock_get_count.return_value = 0
+        with self.assertRaises(Exception):
+            pygame.init()
+            pygame.joystick.init()
+            if pygame.joystick.get_count() < 1:
+                raise Exception("No joystick connected")
+
+    @patch('mower_control.serial.Serial')
+    def test_serial_disconnection(self, mock_serial):
+        mock_serial.side_effect = serial.SerialException("Connection lost")
+        self.assertIsNone(init_serial(GPS_SERIAL_PORT))
 
 if __name__ == '__main__':
     unittest.main()
