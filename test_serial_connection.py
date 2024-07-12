@@ -1,7 +1,6 @@
 import serial
 import time
 
-# Replace /dev/ttyUSB0 with the correct device name if it's different
 SERIAL_PORT = '/dev/ttyUSB0'
 BAUD_RATE = 9600  # Ensure this matches your DIP switch settings
 
