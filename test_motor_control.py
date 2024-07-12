@@ -1,5 +1,6 @@
 import unittest
 from unittest.mock import MagicMock, patch
+import serial  # Add this import
 from motor_control import initialize_motor, update_motor_control, reconnect_motor
 
 class TestMotorControl(unittest.TestCase):
