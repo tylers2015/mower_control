@@ -1,81 +1,211 @@
+import pygame
 import serial
+import RPi.GPIO as GPIO
 import time
 import logging
 import pynmea2
-import RPi.GPIO as GPIO
-from xbox_controller import XboxController
+import tkinter as tk
+from tkinter import simpledialog, messagebox
+from threading import Thread
+import traceback
+import json
+import os
+from typing import Tuple, List, Optional
 
-# Configuration
-SERIAL_PORT = '/dev/ttyUSB0'  # Ensure this is the correct port
-BAUD_RATE = 9600  # Ensure this matches your DIP switch settings
-LOG_FILE = 'mower_control.log'
-GPIO_SERVO_PIN = 17  # Example GPIO pin for servo control
+# Constants
+SERVO_PIN = 18
+BACKUP_DISTANCE = 2  # feet
+GPS_SERIAL_PORT = '/dev/ttyUSB0'  # Path for corrected GPS data
+MOTOR_SERIAL_PORT = '/dev/ttyAMA1'  # Path for motor controller via UART
+SERVO_ON = 7.5  # Duty cycle to turn on servo
+SERVO_OFF = 0  # Duty cycle to turn off servo
+EMERGENCY_STOP_BUTTON = 4  # Designated button for emergency stop
+LOG_FILE = 'gps_data.log'
+GRID_SIZE = 100
 
-# Initialize logging
-logging.basicConfig(filename=LOG_FILE, level=logging.INFO, format='%(asctime)s %(message)s')
+# Setup logging
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+gps_logger = logging.getLogger('GPSLogger')
+motor_logger = logging.getLogger('MotorLogger')
 
-# Initialize GPIO for servo control
+# Initialize log file handlers
+gps_file_handler = logging.FileHandler(LOG_FILE)
+gps_logger.addHandler(gps_file_handler)
+
+# Initialize GPIO
 GPIO.setmode(GPIO.BCM)
-GPIO.setup(GPIO_SERVO_PIN, GPIO.OUT)
-servo = GPIO.PWM(GPIO_SERVO_PIN, 50)  # 50 Hz
-servo.start(7.5)  # Neutral position
+GPIO.setup(SERVO_PIN, GPIO.OUT)
+servo = GPIO.PWM(SERVO_PIN, 50)
+servo.start(0)
 
-# Initialize Xbox controller
-xbox_controller = XboxController()
+# Initialize Pygame for Xbox controller
+pygame.init()
+pygame.joystick.init()
+controller = pygame.joystick.Joystick(0)
+controller.init()
 
-def initialize_motor_serial():
+# Initialize Serial for GPS and Motor controller
+def init_serial(port: str, baudrate: int = 9600, timeout: int = 1) -> Optional[serial.Serial]:
     try:
-        ser = serial.Serial(SERIAL_PORT, baudrate=BAUD_RATE, timeout=1)
-        logging.info("Motor serial initialized")
-        return ser
+        return serial.Serial(port, baudrate, timeout=timeout)
     except serial.SerialException as e:
-        logging.error(f"Failed to initialize motor serial: {e}")
+        logging.error(f"Could not open serial port {port}: {e}")
         return None
 
-def update_motor_control(ser, joystick_input):
-    command = f"X:{joystick_input['x']} Y:{joystick_input['y']}"
+gps_serial = init_serial(GPS_SERIAL_PORT)
+motor_serial = init_serial(MOTOR_SERIAL_PORT)
+
+# Mapping variables
+mapping_mode = False
+obstacle_mode = False
+current_position: Tuple[float, float] = (0.0, 0.0)
+grid: List[List[int]] = [[0 for _ in range(GRID_SIZE)] for _ in range(GRID_SIZE)]
+emergency_stop = False
+gps_status = "Disconnected"
+motor_status = "Disconnected"
+signal_quality = 0
+current_grid_file = 'default_grid.json'
+
+# Load grid data from file
+def load_grid(file_name: str) -> None:
+    global grid, current_grid_file
     try:
-        ser.write(command.encode())
-        logging.info(f"Sent command: {command}")
-    except serial.SerialException as e:
-        logging.error(f"Failed to send command: {e}")
+        if os.path.exists(file_name):
+            with open(file_name, 'r') as file:
+                grid = json.load(file)
+            logging.info(f"Grid data loaded from {file_name}.")
+            current_grid_file = file_name
+        else:
+            logging.error(f"Grid file {file_name} does not exist.")
+            messagebox.showerror("Load Grid", f"Grid file {file_name} does not exist.")
+    except Exception as e:
+        logging.error(f"Error loading grid file {file_name}: {e}")
+        messagebox.showerror("Load Grid", f"Error loading grid file {file_name}: {e}")
 
-def read_gps_data(ser):
+# Save grid data to file
+def save_grid(file_name: str) -> None:
     try:
-        data = ser.readline().decode('utf-8').strip()
-        if data.startswith('$GPGGA'):
-            msg = pynmea2.parse(data)
-            logging.info(f"GPS Data: {msg}")
-            return msg
-    except serial.SerialException as e:
-        logging.error(f"Failed to read GPS data: {e}")
-    except pynmea2.ParseError as e:
-        logging.error(f"Failed to parse GPS data: {e}")
-    return None
+        with open(file_name, 'w') as file:
+            json.dump(grid, file)
+        logging.info(f"Grid data saved to {file_name}.")
+    except Exception as e:
+        logging.error(f"Error saving grid file {file_name}: {e}")
+        messagebox.showerror("Save Grid", f"Error saving grid file {file_name}: {e}")
 
-def main():
-    motor_serial = initialize_motor_serial()
-    gps_serial = initialize_motor_serial()  # Assuming GPS is on the same serial settings
-    if not motor_serial or not gps_serial:
-        logging.error("Serial initialization failed. Exiting.")
-        return
+load_grid(current_grid_file)
 
-    try:
-        while True:
-            joystick_input = xbox_controller.get_joystick()
-            update_motor_control(motor_serial, joystick_input)
-            gps_data = read_gps_data(gps_serial)
-            if gps_data:
-                print(f"Latitude: {gps_data.latitude}, Longitude: {gps_data.longitude}")
+# GUI setup
+class GPSApp:
+    def __init__(self, root: tk.Tk) -> None:
+        self.root = root
+        self.root.title("GPS Monitor")
+        self.lat_label = tk.Label(root, text="Latitude: 0.0")
+        self.lat_label.pack()
+        self.lon_label = tk.Label(root, text="Longitude: 0.0")
+        self.lon_label.pack()
+        self.gps_status_label = tk.Label(root, text="GPS Status: Disconnected")
+        self.gps_status_label.pack()
+        self.motor_status_label = tk.Label(root, text="Motor Status: Disconnected")
+        self.motor_status_label.pack()
+        self.signal_quality_label = tk.Label(root, text="Signal Quality: 0")
+        self.signal_quality_label.pack()
+        self.canvas = tk.Canvas(root, width=500, height=500, bg="white")
+        self.canvas.pack()
+        self.save_button = tk.Button(root, text="Save Grid", command=self.save_grid)
+        self.save_button.pack()
+        self.load_button = tk.Button(root, text="Load Grid", command=self.load_grid)
+        self.load_button.pack()
+        self.mapping_mode_label = tk.Label(root, text="Mapping Mode: Off")
+        self.mapping_mode_label.pack()
+        self.obstacle_mode_label = tk.Label(root, text="Obstacle Mode: Off")
+        self.obstacle_mode_label.pack()
+        self.legend = tk.Label(root, text="Legend:\nBlue: Path\nRed: Obstacle")
+        self.legend.pack()
+        self.update_gui()
 
-            time.sleep(0.1)  # Adjust loop frequency as needed
+    def draw_grid(self) -> None:
+        self.canvas.delete("all")
+        for y in range(GRID_SIZE):
+            for x in range(GRID_SIZE):
+                if grid[y][x] == 1:  # Path
+                    self.canvas.create_rectangle(x*5, y*5, (x+1)*5, (y+1)*5, fill="blue")
+                elif grid[y][x] == -1:  # Obstacle
+                    self.canvas.create_rectangle(x*5, y*5, (x+1)*5, (y+1)*5, fill="red")
 
-    except KeyboardInterrupt:
-        logging.info("Exiting program")
-    finally:
-        motor_serial.close()
-        gps_serial.close()
-        GPIO.cleanup()
+    def update_gui(self) -> None:
+        self.lat_label.config(text=f"Latitude: {current_position[0]:.6f}")
+        self.lon_label.config(text=f"Longitude: {current_position[1]:.6f}")
+        self.gps_status_label.config(text=f"GPS Status: {gps_status}")
+        self.motor_status_label.config(text=f"Motor Status: {motor_status}")
+        self.signal_quality_label.config(text=f"Signal Quality: {signal_quality}")
+        self.mapping_mode_label.config(text=f"Mapping Mode: {'On' if mapping_mode else 'Off'}")
+        self.obstacle_mode_label.config(text=f"Obstacle Mode: {'On' if obstacle_mode else 'Off'}")
+        self.draw_grid()
+        self.root.after(1000, self.update_gui)
 
-if __name__ == '__main__':
-    main()
+    def save_grid(self) -> None:
+        file_name = simpledialog.askstring("Save Grid", "Enter file name:")
+        if file_name:
+            save_grid(file_name + ".json")
+            messagebox.showinfo("Save Grid", f"Grid data saved to {file_name}.json")
+
+    def load_grid(self) -> None:
+        file_name = simpledialog.askstring("Load Grid", "Enter file name:")
+        if file_name:
+            load_grid(file_name + ".json")
+            messagebox.showinfo("Load Grid", f"Grid data loaded from {file_name}.json")
+
+def start_gui() -> None:
+    root = tk.Tk()
+    app = GPSApp(root)
+    root.mainloop()
+
+# Start GUI in a separate thread
+Thread(target=start_gui).start()
+
+# Main loop for reading joystick input and sending motor commands
+def main_loop() -> None:
+    global current_position, gps_status, motor_status, signal_quality
+
+    while True:
+        try:
+            pygame.event.pump()
+            if controller.get_button(EMERGENCY_STOP_BUTTON):
+                emergency_stop = True
+                motor_logger.warning("Emergency stop triggered!")
+                # Add emergency stop logic here
+            else:
+                emergency_stop = False
+
+            # Read joystick values and send motor commands
+            axis_0 = controller.get_axis(0)
+            axis_1 = controller.get_axis(1)
+            command = f"MOVE {axis_0} {axis_1}"
+            send_motor_command(command)
+
+            # Read GPS data
+            if gps_serial and gps_serial.in_waiting:
+                gps_data = gps_serial.readline().decode('ascii', errors='replace')
+                msg = pynmea2.parse(gps_data)
+                if isinstance(msg, pynmea2.GGA):
+                    current_position = (msg.latitude, msg.longitude)
+                    signal_quality = msg.gps_qual
+                    gps_status = "Connected"
+                gps_logger.info(f"GPS Data: {gps_data.strip()}")
+
+        except Exception as e:
+            motor_logger.error(f"Error in main loop: {e}")
+            traceback.print_exc()
+
+def send_motor_command(command: str) -> None:
+    if motor_serial:
+        try:
+            motor_serial.write(command.encode())
+            motor_logger.info(f"Command sent: {command}")
+        except Exception as e:
+            motor_logger.error(f"Failed to send command {command}: {e}")
+    else:
+        motor_logger.error("Motor serial port not initialized.")
+
+# Start the main loop
+Thread(target=main_loop).start()
