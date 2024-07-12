@@ -1,90 +1,81 @@
+import serial
 import time
 import logging
-import serial
+import pynmea2
 import RPi.GPIO as GPIO
+from xbox_controller import XboxController
 
-# Constants for GPIO pins, serial ports, etc.
-GPS_SERIAL_PORT = '/dev/ttyUSB0'
-MOTOR_SERIAL_PORT = '/dev/ttyUSB1'
-BAUDRATE = 9600
+# Configuration
+SERIAL_PORT = '/dev/ttyUSB0'  # Ensure this is the correct port
+BAUD_RATE = 9600  # Ensure this matches your DIP switch settings
+LOG_FILE = 'mower_control.log'
+GPIO_SERVO_PIN = 17  # Example GPIO pin for servo control
 
-# Setup logging
-logging.basicConfig(filename='mower_control.log', level=logging.INFO)
+# Initialize logging
+logging.basicConfig(filename=LOG_FILE, level=logging.INFO, format='%(asctime)s %(message)s')
 
-# Initialize GPIO
-def initialize_gpio():
-    GPIO.setmode(GPIO.BCM)
-    GPIO.setup(18, GPIO.OUT)
-    logging.info("GPIO initialized")
+# Initialize GPIO for servo control
+GPIO.setmode(GPIO.BCM)
+GPIO.setup(GPIO_SERVO_PIN, GPIO.OUT)
+servo = GPIO.PWM(GPIO_SERVO_PIN, 50)  # 50 Hz
+servo.start(7.5)  # Neutral position
 
-# Initialize motor
-def initialize_motor():
+# Initialize Xbox controller
+xbox_controller = XboxController()
+
+def initialize_motor_serial():
     try:
-        motor_serial = serial.Serial(MOTOR_SERIAL_PORT, baudrate=BAUDRATE, timeout=1)
-        logging.info("Motor controller initialized")
-        return motor_serial
+        ser = serial.Serial(SERIAL_PORT, baudrate=BAUD_RATE, timeout=1)
+        logging.info("Motor serial initialized")
+        return ser
     except serial.SerialException as e:
-        logging.error(f"Failed to initialize motor controller: {e}")
+        logging.error(f"Failed to initialize motor serial: {e}")
         return None
 
-# Initialize GPS
-def initialize_gps():
+def update_motor_control(ser, joystick_input):
+    command = f"X:{joystick_input['x']} Y:{joystick_input['y']}"
     try:
-        gps_serial = serial.Serial(GPS_SERIAL_PORT, baudrate=BAUDRATE, timeout=1)
-        logging.info("GPS initialized")
-        return gps_serial
+        ser.write(command.encode())
+        logging.info(f"Sent command: {command}")
     except serial.SerialException as e:
-        logging.error(f"Failed to initialize GPS: {e}")
-        return None
+        logging.error(f"Failed to send command: {e}")
 
-# Reconnect GPS
-def reconnect_gps():
-    while True:
-        try:
-            gps_serial = serial.Serial(GPS_SERIAL_PORT, baudrate=BAUDRATE, timeout=1)
-            logging.info("GPS reconnected successfully.")
-            return gps_serial
-        except serial.SerialException:
-            logging.error("Failed to reconnect GPS. Retrying in 5 seconds...")
-            time.sleep(5)
+def read_gps_data(ser):
+    try:
+        data = ser.readline().decode('utf-8').strip()
+        if data.startswith('$GPGGA'):
+            msg = pynmea2.parse(data)
+            logging.info(f"GPS Data: {msg}")
+            return msg
+    except serial.SerialException as e:
+        logging.error(f"Failed to read GPS data: {e}")
+    except pynmea2.ParseError as e:
+        logging.error(f"Failed to parse GPS data: {e}")
+    return None
 
-# Reconnect motor
-def reconnect_motor():
-    while True:
-        try:
-            motor_serial = serial.Serial(MOTOR_SERIAL_PORT, baudrate=BAUDRATE, timeout=1)
-            logging.info("Motor controller reconnected successfully.")
-            return motor_serial
-        except serial.SerialException:
-            logging.error("Failed to reconnect motor controller. Retrying in 5 seconds...")
-            time.sleep(5)
-
-# Update motor control based on joystick inputs
-def update_motor_control(motor_serial, joystick_input):
-    if motor_serial:
-        # Example command to motor controller
-        command = f"X:{joystick_input['x']} Y:{joystick_input['y']}"
-        try:
-            motor_serial.write(command.encode())
-            logging.info(f"Sent command to motor: {command}")
-        except serial.SerialException as e:
-            logging.error(f"Failed to send command to motor: {e}")
-            motor_serial = reconnect_motor()
-    else:
-        logging.error("Motor serial is not initialized")
-
-# Main function
 def main():
-    initialize_gpio()
-    motor_serial = initialize_motor()
-    gps_serial = initialize_gps()
+    motor_serial = initialize_motor_serial()
+    gps_serial = initialize_motor_serial()  # Assuming GPS is on the same serial settings
+    if not motor_serial or not gps_serial:
+        logging.error("Serial initialization failed. Exiting.")
+        return
 
-    # Main loop
-    while True:
-        # Simulate reading joystick input
-        joystick_input = {'x': 0.5, 'y': -0.5}
-        update_motor_control(motor_serial, joystick_input)
-        time.sleep(0.1)
+    try:
+        while True:
+            joystick_input = xbox_controller.get_joystick()
+            update_motor_control(motor_serial, joystick_input)
+            gps_data = read_gps_data(gps_serial)
+            if gps_data:
+                print(f"Latitude: {gps_data.latitude}, Longitude: {gps_data.longitude}")
+
+            time.sleep(0.1)  # Adjust loop frequency as needed
+
+    except KeyboardInterrupt:
+        logging.info("Exiting program")
+    finally:
+        motor_serial.close()
+        gps_serial.close()
+        GPIO.cleanup()
 
 if __name__ == '__main__':
     main()
