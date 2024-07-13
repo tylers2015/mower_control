@@ -1,48 +1,50 @@
-import unittest
-from unittest.mock import patch, MagicMock
-import motor_control
-import json
+import pygame
+import RPi.GPIO as GPIO
+import time
 
-class TestMotorControl(unittest.TestCase):
+# Initialize Pygame and the joystick
+pygame.init()
+pygame.joystick.init()
 
-    @patch('motor_control.serial.Serial')
-    def test_init_serial_success(self, mock_serial):
-        mock_serial.return_value = MagicMock()
-        result = motor_control.init_serial('/dev/ttyUSB0')
-        self.assertIsNotNone(result)
-        mock_serial.assert_called_with('/dev/ttyUSB0', 9600, timeout=1)
+# Set up GPIO
+GPIO.setmode(GPIO.BCM)
+motor_pin = 18
+GPIO.setup(motor_pin, GPIO.OUT)
+motor = GPIO.PWM(motor_pin, 100)
+motor.start(0)
 
-    @patch('motor_control.serial.Serial')
-    def test_init_serial_failure(self, mock_serial):
-        mock_serial.side_effect = motor_control.serial.SerialException("Port not found")
-        result = motor_control.init_serial('/dev/ttyUSB0')
-        self.assertIsNone(result)
-        mock_serial.assert_called_with('/dev/ttyUSB0', 9600, timeout=1)
+# Function to map joystick values to PWM duty cycle
+def map_joystick_to_pwm(value):
+    return (value + 1) * 50  # Convert -1 to 1 range to 0 to 100 duty cycle
 
-    def test_load_grid_success(self):
-        mock_grid = [[0, 1], [1, 0]]
-        with patch('builtins.open', unittest.mock.mock_open(read_data=json.dumps(mock_grid))):
-            motor_control.load_grid('test_grid.json')
-            self.assertEqual(motor_control.grid, mock_grid)
+# Check for joystick
+if pygame.joystick.get_count() == 0:
+    print("No joystick detected.")
+    pygame.quit()
+    exit()
 
-    def test_load_grid_failure(self):
-        with patch('builtins.open', side_effect=Exception('File not found')):
-            with self.assertLogs('motor_control', level='ERROR') as cm:
-                motor_control.load_grid('test_grid.json')
-            self.assertIn('ERROR:motor_control:Error loading grid file test_grid.json: File not found', cm.output)
+joystick = pygame.joystick.Joystick(0)
+joystick.init()
 
-    def test_save_grid_success(self):
-        mock_grid = [[0, 1], [1, 0]]
-        motor_control.grid = mock_grid
-        with patch('builtins.open', unittest.mock.mock_open()) as mock_file:
-            motor_control.save_grid('test_grid.json')
-            mock_file().write.assert_called_once_with(json.dumps(mock_grid))
+print("Joystick detected:", joystick.get_name())
 
-    def test_save_grid_failure(self):
-        with patch('builtins.open', side_effect=Exception('Write error')):
-            with self.assertLogs('motor_control', level='ERROR') as cm:
-                motor_control.save_grid('test_grid.json')
-            self.assertIn('ERROR:motor_control:Error saving grid file test_grid.json: Write error', cm.output)
+try:
+    while True:
+        pygame.event.pump()
 
-if __name__ == '__main__':
-    unittest.main()
+        # Get the axis value (assuming single-axis control for simplicity)
+        axis_value = joystick.get_axis(1)  # Left stick vertical axis
+        pwm_value = map_joystick_to_pwm(axis_value)
+        motor.ChangeDutyCycle(pwm_value)
+
+        print(f"Axis Value: {axis_value}, PWM Duty Cycle: {pwm_value}")
+
+        time.sleep(0.1)
+
+except KeyboardInterrupt:
+    pass
+
+finally:
+    motor.stop()
+    GPIO.cleanup()
+    pygame.quit()
