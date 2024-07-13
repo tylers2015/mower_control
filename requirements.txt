@@ -1,5 +1,0 @@
-pygame
-pyserial
-RPi.GPIO
-pynmea2
-tk
