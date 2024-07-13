@@ -127,85 +127,70 @@ class GPSApp:
         self.canvas.delete("all")
         for y in range(GRID_SIZE):
             for x in range(GRID_SIZE):
+                color = "white"
                 if grid[y][x] == 1:  # Path
-                    self.canvas.create_rectangle(x*5, y*5, (x+1)*5, (y+1)*5, fill="blue")
-                elif grid[y][x] == -1:  # Obstacle
-                    self.canvas.create_rectangle(x*5, y*5, (x+1)*5, (y+1)*5, fill="red")
+                    color = "blue"
+                elif grid[y][x] == 2:  # Obstacle
+                    color = "red"
+                self.canvas.create_rectangle(x*5, y*5, x*5+5, y*5+5, fill=color, outline="black")
 
     def update_gui(self) -> None:
-        self.lat_label.config(text=f"Latitude: {current_position[0]:.6f}")
-        self.lon_label.config(text=f"Longitude: {current_position[1]:.6f}")
+        self.lat_label.config(text=f"Latitude: {current_position[0]}")
+        self.lon_label.config(text=f"Longitude: {current_position[1]}")
         self.gps_status_label.config(text=f"GPS Status: {gps_status}")
         self.motor_status_label.config(text=f"Motor Status: {motor_status}")
         self.signal_quality_label.config(text=f"Signal Quality: {signal_quality}")
         self.mapping_mode_label.config(text=f"Mapping Mode: {'On' if mapping_mode else 'Off'}")
         self.obstacle_mode_label.config(text=f"Obstacle Mode: {'On' if obstacle_mode else 'Off'}")
         self.draw_grid()
-        self.root.after(1000, self.update_gui)
+        self.root.after(1000, self.update_gui)  # Refresh every second
 
     def save_grid(self) -> None:
         file_name = simpledialog.askstring("Save Grid", "Enter file name:")
         if file_name:
-            save_grid(file_name + ".json")
-            messagebox.showinfo("Save Grid", f"Grid data saved to {file_name}.json")
+            save_grid(file_name)
 
     def load_grid(self) -> None:
         file_name = simpledialog.askstring("Load Grid", "Enter file name:")
         if file_name:
-            load_grid(file_name + ".json")
-            messagebox.showinfo("Load Grid", f"Grid data loaded from {file_name}.json")
+            load_grid(file_name)
 
-def start_gui() -> None:
-    root = tk.Tk()
-    app = GPSApp(root)
-    root.mainloop()
+root = tk.Tk()
+app = GPSApp(root)
 
-# Start GUI in a separate thread
-Thread(target=start_gui).start()
-
-# Main loop for reading joystick input and sending motor commands
+# Main loop
 def main_loop() -> None:
-    global current_position, gps_status, motor_status, signal_quality
-
-    while True:
-        try:
+    global current_position, gps_status, motor_status, signal_quality, emergency_stop
+    try:
+        while True:
             pygame.event.pump()
             if controller.get_button(EMERGENCY_STOP_BUTTON):
                 emergency_stop = True
-                motor_logger.warning("Emergency stop triggered!")
-                # Add emergency stop logic here
-            else:
-                emergency_stop = False
-
-            # Read joystick values and send motor commands
-            axis_0 = controller.get_axis(0)
-            axis_1 = controller.get_axis(1)
-            command = f"MOVE {axis_0} {axis_1}"
-            send_motor_command(command)
-
+                motor_status = "Emergency Stop"
+                servo.ChangeDutyCycle(SERVO_OFF)
+                continue
+            emergency_stop = False
+            motor_status = "Running"
+            # Update motor control
+            left_stick_y = controller.get_axis(1)
+            right_stick_y = controller.get_axis(3)
+            motor_command = f"L{left_stick_y}R{right_stick_y}\n"
+            motor_serial.write(motor_command.encode())
             # Read GPS data
-            if gps_serial and gps_serial.in_waiting:
-                gps_data = gps_serial.readline().decode('ascii', errors='replace')
-                msg = pynmea2.parse(gps_data)
-                if isinstance(msg, pynmea2.GGA):
+            if gps_serial.in_waiting > 0:
+                line = gps_serial.readline().decode('ascii', errors='replace')
+                if line.startswith('$GPGGA'):
+                    msg = pynmea2.parse(line)
                     current_position = (msg.latitude, msg.longitude)
                     signal_quality = msg.gps_qual
                     gps_status = "Connected"
-                gps_logger.info(f"GPS Data: {gps_data.strip()}")
+            time.sleep(0.1)
+    except Exception as e:
+        logging.error(f"Error in main loop: {e}")
+        logging.error(traceback.format_exc())
 
-        except Exception as e:
-            motor_logger.error(f"Error in main loop: {e}")
-            traceback.print_exc()
+thread = Thread(target=main_loop)
+thread.daemon = True
+thread.start()
 
-def send_motor_command(command: str) -> None:
-    if motor_serial:
-        try:
-            motor_serial.write(command.encode())
-            motor_logger.info(f"Command sent: {command}")
-        except Exception as e:
-            motor_logger.error(f"Failed to send command {command}: {e}")
-    else:
-        motor_logger.error("Motor serial port not initialized.")
-
-# Start the main loop
-Thread(target=main_loop).start()
+root.mainloop()
