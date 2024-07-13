@@ -74,3 +74,54 @@ This project focuses on developing an autonomous lawn mower controlled using an 
    ```sh
    git clone https://github.com/tylers2015/mower_control.git
    cd mower_control
+2.	Install Required Packages:
+
+   sudo apt-get update
+   sudo apt-get install python3-pygame python3-rpi.gpio bluetooth bluez blueman
+
+### Running the Script
+
+1.	Execute the Script:
+
+python3 src/mower_control.py	
+
+2.	Observe the Console and GUI:
+	•	Confirm that the motors respond to controller inputs and the GPS data is being updated correctly.
+
+3. Troubleshooting
+
+	•	Connection Issues:
+	•	Ensure the Xbox controller is in pairing mode.
+	•	Verify that the Raspberry Pi’s Bluetooth is active and functional.
+	•	Restart the Bluetooth service if needed:sudo systemctl restart bluetooth
+
+###Connecting the Xbox One Controller via Bluetooth
+
+   Turn on the Xbox One Controller
+   1.	Press the Xbox button to turn it on.
+	2.	Put it in pairing mode by holding the sync button until the Xbox button flashes rapidly.
+
+   Pair the Controller with Raspberry Pi
+   1.	Open a terminal and use the bluetoothctl tool:bluetoothctl
+   2.	In the bluetoothctl prompt, enter the following commands:agent on
+default-agent
+scan on
+
+3.	Wait for the controller to appear in the list, then note its MAC address. Pair with it using:
+pair <MAC_ADDRESS>
+trust <MAC_ADDRESS>
+connect <MAC_ADDRESS>
+
+Verify the Connection
+
+Ensure that the controller is connected. You should see confirmation messages indicating a successful connection.
+
+License
+
+This project is licensed under the MIT License.
+
+For further details, please refer to the complete documentation and code in the repository.
+
+
+
+
