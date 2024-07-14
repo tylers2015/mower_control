@@ -185,6 +185,11 @@ def apply_dead_zone(value: float, dead_zone: float = 0.2) -> float:  # Increased
 def clamp(value: float, min_value: float = -1.0, max_value: float = 1.0) -> float:
     return max(min_value, min(value, max_value))
 
+# Function to send command to motor driver
+def send_motor_command(serial_port, motor, direction, speed):
+    command = f"{motor}{'F' if direction == 0 else 'R'}{speed}\n"
+    serial_port.write(command.encode())
+
 # Main loop
 def main_loop() -> None:
     global current_position, gps_status, motor_status, signal_quality, emergency_stop
@@ -194,9 +199,9 @@ def main_loop() -> None:
             if controller and controller.get_button(EMERGENCY_STOP_BUTTON):
                 emergency_stop = True
                 motor_status = "Emergency Stop"
-                servo.ChangeDutyCycle(SERVO_OFF)
+                send_motor_command(motor_serial, motor=0, direction=0, speed=0)  # Motor Left Stop
+                send_motor_command(motor_serial, motor=1, direction=0, speed=0)  # Motor Right Stop
                 logging.info("Emergency Stop Activated")
-                motor_serial.write("STOP\n".encode())
                 continue
             emergency_stop = False
             motor_status = "Running"
@@ -208,16 +213,25 @@ def main_loop() -> None:
                 right_stick_y = apply_dead_zone(raw_right_stick_y)
                 left_stick_y = clamp(left_stick_y)
                 right_stick_y = clamp(right_stick_y)
-                logging.debug(f"Raw Left Stick Y: {raw_left_stick_y}, Raw Right Stick Y: {raw_right_stick_y}")
+                logging.debug(f"Raw Left Stick Y: {raw_left_stick_y}, Raw Right Stick YHere's the continuation and completion of the updated `mower_control.py` code:
+
+```python
                 logging.debug(f"Processed Left Stick Y: {left_stick_y}, Processed Right Stick Y: {right_stick_y}")
 
+                # Determine motor commands based on stick inputs
                 if left_stick_y == 0 and right_stick_y == 0:
-                    motor_command = "STOP\n"
+                    send_motor_command(motor_serial, motor=0, direction=0, speed=0)  # Motor Left Stop
+                    send_motor_command(motor_serial, motor=1, direction=0, speed=0)  # Motor Right Stop
                 else:
-                    motor_command = f"L{left_stick_y:.2f}R{right_stick_y:.2f}\n"
+                    left_direction = 0 if left_stick_y >= 0 else 1  # 0 for forward, 1 for reverse
+                    right_direction = 0 if right_stick_y >= 0 else 1  # 0 for forward, 1 for reverse
+                    left_speed = int(abs(left_stick_y) * 100)
+                    right_speed = int(abs(right_stick_y) * 100)
+                    send_motor_command(motor_serial, motor=0, direction=left_direction, speed=left_speed)
+                    send_motor_command(motor_serial, motor=1, direction=right_direction, speed=right_speed)
 
-                logging.debug(f"Motor Command: {motor_command}")
-                motor_serial.write(motor_command.encode())
+                logging.debug(f"Motor Left: Direction {left_direction}, Speed {left_speed}")
+                logging.debug(f"Motor Right: Direction {right_direction}, Speed {right_speed}")
             else:
                 logging.debug("No controller connected.")
             # Read GPS data
