@@ -26,12 +26,12 @@ motorDirection = False
 DEADZONE = 0.1
 
 def process_joystick_input():
-    global motorLeft, motorRight, motorDirection
+    global motorLeft, motorRight
 
     pygame.event.pump()
     
-    right_stick_y = joystick.get_axis(1)
-    left_stick_y = joystick.get_axis(4)
+    left_stick_y = joystick.get_axis(1)
+    right_stick_y = joystick.get_axis(4)
     
     logging.debug(f"Raw Left Stick Y: {left_stick_y}, Raw Right Stick Y: {right_stick_y}")
     
@@ -41,24 +41,24 @@ def process_joystick_input():
         right_stick_y = 0
     
     motorLeft = int(left_stick_y * 63)
-    motorRight = int(right_stick_y * 63) | 128
+    motorRight = int(right_stick_y * 63)
     
     if motorLeft < 0:
-        motorLeft = (abs(motorLeft) & 63) | 64
+        motorLeft = (abs(motorLeft) & 63) | 64  # Reverse bit for left motor
     else:
-        motorLeft &= 63
+        motorLeft &= 63  # Forward for left motor
         
     if motorRight < 0:
-        motorRight = (abs(motorRight) & 63) | 192
+        motorRight = (abs(motorRight) & 63) | 192  # Reverse bit for right motor
     else:
-        motorRight &= 63
+        motorRight = (motorRight & 63) | 128  # Forward for right motor
     
     logging.debug(f"Processed Left Stick Y: {motorLeft}, Processed Right Stick Y: {motorRight}")
 
 def send_motor_command():
     packet = bytearray([motorRight, motorLeft])
     serialPort.write(packet)
-    logging.debug(f"Sending command: R{motorRight:02X}L{motorLeft:02X}")
+    logging.debug(f"Sending command: R{motorRight:02X} L{motorLeft:02X}")
 
 def main_loop():
     logging.info("Starting main loop. Move joystick to test.")
