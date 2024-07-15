@@ -1,65 +1,62 @@
-import time
-import logging
 import pygame
 import serial
+import time
+import logging
 
+# Initialize Pygame and joystick
 pygame.init()
 pygame.joystick.init()
 
+# Setup serial communication
+serialPort = serial.Serial("/dev/ttyUSB0", 9600, timeout=0.5)
+
+# Logging setup
 logging.basicConfig(level=logging.DEBUG)
 
-if pygame.joystick.get_count() < 1:
-    raise Exception("No joystick found")
-    
+# Joystick setup
 joystick = pygame.joystick.Joystick(0)
 joystick.init()
 
-SERIAL_PORT = '/dev/ttyUSB0'
-BAUD_RATE = 9600
+# Initialize motor control variables
+motorLeft = 0
+motorRight = 0
+motorDirection = False
 
-try:
-    ser = serial.Serial(SERIAL_PORT, BAUD_RATE)
-except Exception as e:
-    logging.error(f"Error opening serial port {SERIAL_PORT}: {e}")
-    raise
+def process_joystick_input():
+    global motorLeft, motorRight, motorDirection
 
-DEADZONE = 0.1
+    pygame.event.pump()
+    
+    left_stick_y = joystick.get_axis(1)
+    right_stick_y = joystick.get_axis(4)
+    
+    logging.debug(f"Raw Left Stick Y: {left_stick_y}, Raw Right Stick Y: {right_stick_y}")
+    
+    motorLeft = int(left_stick_y * 63)
+    motorRight = int(right_stick_y * 63) | 128
+    
+    if motorLeft < 0:
+        motorLeft = (abs(motorLeft) & 63) | 64
+    if motorRight < 0:
+        motorRight = (abs(motorRight) & 63) | 192
+    
+    logging.debug(f"Processed Left Stick Y: {motorLeft}, Processed Right Stick Y: {motorRight}")
 
-def process_input(raw_value):
-    if abs(raw_value) < DEADZONE:
-        return 0
-    return raw_value
-
-def send_motor_command(left_speed, right_speed):
-    command = f'L{left_speed:.2f}R{right_speed:.2f}\n'
-    logging.debug(f"Sending command: {command.strip()}")
-    ser.write(command.encode())
+def send_motor_command():
+    packet = bytearray([motorLeft, motorRight])
+    serialPort.write(packet)
+    logging.debug(f"Sending command: L{motorLeft:02X}R{motorRight:02X}")
 
 def main_loop():
+    logging.info("Starting main loop. Move joystick to test.")
     try:
         while True:
-            pygame.event.pump()
-            raw_left_stick_y = joystick.get_axis(1)
-            raw_right_stick_y = joystick.get_axis(3)
-            logging.debug(f"Raw Left Stick Y: {raw_left_stick_y}, Raw Right Stick Y: {raw_right_stick_y}")
-
-            processed_left_stick_y = process_input(raw_left_stick_y)
-            processed_right_stick_y = process_input(raw_right_stick_y)
-            logging.debug(f"Processed Left Stick Y: {processed_left_stick_y}, Processed Right Stick Y: {processed_right_stick_y}")
-
-            if processed_left_stick_y == 0 and processed_right_stick_y == 0:
-                send_motor_command(0, 0)
-            else:
-                send_motor_command(processed_left_stick_y, processed_right_stick_y)
-
+            process_joystick_input()
+            send_motor_command()
             time.sleep(0.1)
-
     except KeyboardInterrupt:
+        logging.info("Exiting main loop.")
         pass
-    finally:
-        pygame.quit()
-        ser.close()
 
 if __name__ == "__main__":
-    logging.info("Starting main loop. Move joystick to test.")
     main_loop()
