@@ -17,10 +17,13 @@ logging.basicConfig(level=logging.DEBUG)
 joystick = pygame.joystick.Joystick(0)
 joystick.init()
 
-# Initialize motor control variables
+# Motor control variables
 motorLeft = 0
 motorRight = 0
 motorDirection = False
+
+# Calibration threshold to handle joystick drift
+DEADZONE = 0.1
 
 def process_joystick_input():
     global motorLeft, motorRight, motorDirection
@@ -31,6 +34,11 @@ def process_joystick_input():
     left_stick_y = joystick.get_axis(4)
     
     logging.debug(f"Raw Left Stick Y: {left_stick_y}, Raw Right Stick Y: {right_stick_y}")
+    
+    if abs(left_stick_y) < DEADZONE:
+        left_stick_y = 0
+    if abs(right_stick_y) < DEADZONE:
+        right_stick_y = 0
     
     motorLeft = int(left_stick_y * 63)
     motorRight = int(right_stick_y * 63) | 128
