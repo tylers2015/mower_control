@@ -20,45 +20,56 @@ joystick.init()
 # Motor control variables
 motorLeft = 0
 motorRight = 0
-motorDirection = False
 
 # Calibration threshold to handle joystick drift
 DEADZONE = 0.1
+
+# Motor trim adjustments
+left_trim = 0
+right_trim = 0
+
+# Speed scaling factor to increase speed
+SPEED_SCALE = 100  # Increase this value to increase speed
 
 def process_joystick_input():
     global motorLeft, motorRight
 
     pygame.event.pump()
     
-    left_stick_y = joystick.get_axis(1)
-    right_stick_y = joystick.get_axis(4)
+    forward = joystick.get_axis(0)  # Forward/backward control
+    steer = joystick.get_axis(1)    # Left/right control
     
-    logging.debug(f"Raw Left Stick Y: {left_stick_y}, Raw Right Stick Y: {right_stick_y}")
+    logging.debug(f"Raw Forward: {forward}, Raw Steer: {steer}")
     
-    if abs(left_stick_y) < DEADZONE:
-        left_stick_y = 0
-    if abs(right_stick_y) < DEADZONE:
-        right_stick_y = 0
+    if abs(forward) < DEADZONE:
+        forward = 0
+    if abs(steer) < DEADZONE:
+        steer = 0
     
-    motorLeft = int(left_stick_y * 63)
-    motorRight = int(right_stick_y * 63)
+    # Calculate motor speeds for zero-turn steering with increased speed
+    left_speed = (forward + steer) * SPEED_SCALE + left_trim
+    right_speed = (forward - steer) * SPEED_SCALE + right_trim
     
-    if motorLeft < 0:
-        motorLeft = (abs(motorLeft) & 63) | 64  # Reverse bit for left motor
+    # Ensure values are within the 0-63 range and set direction bits
+    motorLeft = int(left_speed) & 63
+    motorRight = int(right_speed) & 63
+    
+    if left_speed < 0:
+        motorLeft |= 64  # Reverse bit for left motor
     else:
         motorLeft &= 63  # Forward for left motor
         
-    if motorRight < 0:
-        motorRight = (abs(motorRight) & 63) | 192  # Reverse bit for right motor
+    if right_speed < 0:
+        motorRight |= 192  # Reverse bit for right motor
     else:
-        motorRight = (motorRight & 63) | 128  # Forward for right motor
+        motorRight |= 128  # Forward for right motor
     
-    logging.debug(f"Processed Left Stick Y: {motorLeft}, Processed Right Stick Y: {motorRight}")
+    logging.debug(f"Processed Left Motor: {motorLeft}, Processed Right Motor: {motorRight}")
 
 def send_motor_command():
     packet = bytearray([motorRight, motorLeft])
     serialPort.write(packet)
-    logging.debug(f"Sending command: R{motorRight:02X} L{motorLeft:02X}")
+    logging.debug(f"Sending command: L{motorLeft:02X} R{motorRight:02X}")
 
 def main_loop():
     logging.info("Starting main loop. Move joystick to test.")
@@ -69,6 +80,8 @@ def main_loop():
             time.sleep(0.1)
     except KeyboardInterrupt:
         logging.info("Exiting main loop.")
+        # Send stop command to ensure motors are stopped
+        serialPort.write(bytearray([128, 128]))  # Stop motors
         pass
 
 if __name__ == "__main__":
