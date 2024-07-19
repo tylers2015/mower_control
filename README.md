@@ -1,192 +1,132 @@
-# Mower Control
+# Motor Control for Zero-Turn Mower
 
-Code to control an automated mower using Raspberry Pi, GPS, and Xbox controller.
+This project provides a Python script to control a zero-turn mower using an Xbox controller. The control scheme uses the left joystick for forward/backward movement and the right joystick for steering, allowing precise control of the mower's movements.
 
-## Project Overview
+## Table of Contents
 
-This project focuses on developing an autonomous lawn mower controlled using an Xbox One controller. The system integrates GPS data handling, motor control, and a graphical user interface (GUI) for monitoring and controlling the mower.
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Usage](#usage)
+- [Configuration](#configuration)
+- [Troubleshooting](#troubleshooting)
+- [Contributing](#contributing)
+- [License](#license)
 
-### Main Components and Functionalities
+## Requirements
 
-1. **Libraries and Constants**:
-   - Libraries: 
-     - `pygame`: For Xbox controller input handling.
-     - `serial`: For serial communication with GPS and motor controller.
-     - `RPi.GPIO`: For controlling GPIO pins on the Raspberry Pi.
-     - Standard Python libraries: `time`, `logging`, `traceback`, `json`, `os`, `threading`, `tkinter`, `simpledialog`, `messagebox`.
-     - `pynmea2`: For parsing GPS data.
-   - Constants:
-     - `SERVO_PIN`: GPIO pin for servo control.
-     - `BACKUP_DISTANCE`: Distance to move backward in feet.
-     - `GPS_SERIAL_PORT`: Serial port for GPS data.
-     - `MOTOR_SERIAL_PORT`: Serial port for motor controller.
-     - `SERVO_ON`: Duty cycle to turn on the servo.
-     - `SERVO_OFF`: Duty cycle to turn off the servo.
-     - `EMERGENCY_STOP_BUTTON`: Xbox controller button for emergency stop.
-     - `LOG_FILE`: Log file for GPS data.
-     - `GRID_SIZE`: Size of the grid for mapping.
+- Raspberry Pi
+- Python 3.7+
+- Xbox Wireless Controller
+- Cytron Motor Driver
+- Pygame library
+- PySerial library
 
-2. **Logging Setup**:
-   - Records GPS data and debug information to a log file (`gps_data.log`).
+## Installation
 
-3. **GPIO Initialization**:
-   - Sets up GPIO pins and PWM signal for the servo motor control.
+1. **Clone the Repository**
 
-4. **Xbox Controller Initialization**:
-   - Uses `pygame` to initialize the Xbox controller and handle its inputs.
+    ```bash
+    git clone https://github.com/yourusername/zero-turn-mower-control.git
+    cd zero-turn-mower-control
+    ```
 
-5. **Serial Port Initialization**:
-   - Functions (`init_serial`) to initialize serial connections for the GPS and motor controller.
+2. **Set Up a Virtual Environment**
 
-6. **Mapping and State Variables**:
-   - Variables for mapping mode, obstacle mode, current GPS position, and a grid representing the mapped area.
-   - The grid is a 2D list representing the lawn, with each cell indicating a path or obstacle.
+    ```bash
+    python3 -m venv mower_control_env
+    source mower_control_env/bin/activate
+    ```
 
-7. **Grid Data Management**:
-   - Functions to load (`load_grid`) and save (`save_grid`) grid data from/to a JSON file.
+3. **Install Dependencies**
 
-8. **GUI Setup**:
-   - A `tkinter` based GUI displays GPS coordinates, motor status, signal quality, and interacts with the grid data.
-   - Includes labels for displaying information, a canvas for the grid, and buttons for saving and loading the grid.
+    ```bash
+    pip install pygame pyserial
+    ```
 
-9. **Motor Control**:
-   - Functions to update motor control based on joystick inputs and handle emergency stops.
+## Usage
 
-10. **GPS Data Handling**:
-   - Functions to read and parse GPS data from the serial port and update the current position and signal quality.
+1. **Connect the Xbox Controller**
 
-11. **Main Loop**:
-   - Continuously checks for controller inputs, updates motor control, reads GPS data, and updates the GUI.
+    Ensure your Xbox controller is connected to the Raspberry Pi via Bluetooth or USB.
 
-## Setup
+2. **Connect the Motor Driver**
 
-### Prerequisites
+    Connect the Cytron Motor Driver to the Raspberry Pi's serial port (`/dev/ttyUSB0`).
 
-- Raspberry Pi with Raspbian OS installed.
-- Xbox One controller.
-- GPS module.
-- Motor controller and motors.
-- Python 3 installed on the Raspberry Pi.
+3. **Run the Script**
 
-### Installation
+    ```bash
+    python mower_control.py
+    ```
 
-1. **Clone the Repository**:
-   ```sh
-   git clone https://github.com/tylers2015/mower_control.git
-   cd mower_control
+4. **Control the Mower**
 
-    Install Required Packages:
+    - **Left Joystick (Axis 0)**: Forward/Backward movement
+    - **Right Joystick (Axis 1)**: Left/Right steering
 
-    sh
+## Configuration
 
-    sudo apt-get update
-    sudo apt-get install python3-pygame python3-rpi.gpio bluetooth bluez blueman
+### Adjusting Speed
 
-Running the Script
+The script includes a `SPEED_SCALE` variable to adjust the overall speed of the motors. You can modify this value to increase or decrease the speed.
 
-    Execute the Script:
+    ```python
+    SPEED_SCALE = 100  # Adjust this value as needed
+    ```
 
-    sh
+### Motor Trim
 
-    python3 src/mower_control.py
+If the motors do not run at the same speed, you can adjust the `left_trim` and `right_trim` variables to compensate.
 
-    Observe the Console and GUI:
-        Confirm that the motors respond to controller inputs and the GPS data is being updated correctly.
+    ```python
+    left_trim = 0
+    right_trim = 0
+    ```
 
-Troubleshooting
+### Deadzone
 
-    Connection Issues:
-        Ensure the Xbox controller is in pairing mode.
-        Verify that the Raspberry Pi’s Bluetooth is active and functional.
-        Restart the Bluetooth service if needed:
+The `DEADZONE` variable helps to handle joystick drift by ignoring small inputs.
 
-        sh
+    ```python
+    DEADZONE = 0.1
+    ```
 
-        sudo systemctl restart bluetooth
+## Troubleshooting
 
-Connecting the Xbox One Controller via Bluetooth
+- **No response from the motors**: 
+    - Ensure the serial port (`/dev/ttyUSB0`) is correct and the motor driver is properly connected.
+    - Check the connections and power supply to the motor driver.
+  
+- **Joystick not detected**: 
+    - Ensure the Xbox controller is properly connected and recognized by the Raspberry Pi.
+    - Check the device path (`/dev/input/eventX`) in the script.
 
-    Turn on the Xbox One Controller:
-        Press the Xbox button to turn it on.
-        Put it in pairing mode by holding the sync button until the Xbox button flashes rapidly.
+- **Motors not moving as expected**:
+    - Verify the joystick axis assignments are correct.
+    - Adjust the `SPEED_SCALE`, `left_trim`, and `right_trim` values to calibrate the motor speeds.
 
-    Pair the Controller with Raspberry Pi:
-        Open a terminal and use the bluetoothctl tool:
+## Contributing
 
-        sh
+Contributions are welcome! Please open an issue or submit a pull request with your changes.
 
-bluetoothctl
+## License
 
-In the bluetoothctl prompt, enter the following commands:
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
 
-sh
+## Example
 
-agent on
-default-agent
-scan on
+Below is a sample of what the logging output might look like when running the script:
 
-Wait for the controller to appear in the list, then note its MAC address. Pair with it using:
+    ```plaintext
+    DEBUG:root:Opened serial port /dev/ttyUSB0 at 9600 baud
+    DEBUG:root:Found gamepad: Xbox Wireless Controller at /dev/input/event4
+    DEBUG:root:Entering continuous control loop. Press Ctrl-C to exit.
+    DEBUG:root:Raw Forward: 0.5, Raw Steer: -0.3
+    DEBUG:root:Processed Left Motor: 128, Processed Right Motor: 76
+    DEBUG:root:Sending command: L80 R4C
+    ...
+    ```
 
-sh
+## Support
 
-        pair <MAC_ADDRESS>
-        trust <MAC_ADDRESS>
-        connect <MAC_ADDRESS>
-
-    Verify the Connection:
-        Ensure that the controller is connected. You should see confirmation messages indicating a successful connection.
-
-Setting Up SSH Key for GitHub
-
-    Generate SSH Key:
-
-    sh
-
-ssh-keygen -t ed25519 -C "your_email@example.com"
-
-Follow the prompts to save the key (press Enter to accept the default location) and set a passphrase if desired.
-
-Add Your SSH Key to the ssh-agent:
-
-sh
-
-eval "$(ssh-agent -s)"
-ssh-add ~/.ssh/id_ed25519
-
-Copy Your SSH Key to the Clipboard:
-
-sh
-
-cat ~/.ssh/id_ed25519.pub
-
-Copy the output of this command.
-
-Add the SSH Key to Your GitHub Account:
-
-    Go to GitHub SSH keys settings.
-    Click "New SSH key".
-    Paste the copied SSH key into the "Key" field.
-    Add a descriptive title.
-    Click "Add SSH key".
-
-Change the Remote URL to Use SSH:
-
-sh
-
-git remote set-url origin git@github.com:tylers2015/mower_control.git
-
-Push the test Branch to the Remote Repository:
-
-sh
-
-    git push origin test
-
-License
-
-This project is licensed under the MIT License. For further details, please refer to the complete documentation and code in the repository.
-
-rust
-
-
-This README file now includes the steps for setting up the SSH key for GitHub.
-
+For any questions or support, please open an issue on the [GitHub repository](https://github.com/yourusername/zero-turn-mower-control/issues).
