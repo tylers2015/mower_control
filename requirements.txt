@@ -1,5 +1,2 @@
-pygame
-pyserial
-RPi.GPIO
-pynmea2
-tkinter
+pygame==2.1.2
+pyserial==3.5
