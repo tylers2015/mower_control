@@ -1,132 +1,89 @@
-# Motor Control for Zero-Turn Mower
+# Mower Control System
 
-This project provides a Python script to control a zero-turn mower using an Xbox controller. The control scheme uses the left joystick for forward/backward movement and the right joystick for steering, allowing precise control of the mower's movements.
+This project implements a control system for a robotic mower using a Raspberry Pi, an MDDS30 motor driver, and an Xbox One controller.
 
-## Table of Contents
+## Hardware Requirements
 
-- [Requirements](#requirements)
-- [Installation](#installation)
-- [Usage](#usage)
-- [Configuration](#configuration)
-- [Troubleshooting](#troubleshooting)
-- [Contributing](#contributing)
-- [License](#license)
+- Raspberry Pi (any model with USB and Bluetooth)
+- MDDS30 Motor Driver
+- Xbox One Controller
+- Robot chassis with two DC motors
 
-## Requirements
+## Software Requirements
 
-- Raspberry Pi
 - Python 3.7+
-- Xbox Wireless Controller
-- Cytron Motor Driver
-- Pygame library
-- PySerial library
+- pygame
+- pyserial
 
 ## Installation
 
-1. **Clone the Repository**
+1. Clone this repository or download the files to your Raspberry Pi.
 
-    ```bash
-    git clone https://github.com/yourusername/zero-turn-mower-control.git
-    cd zero-turn-mower-control
-    ```
+2. Navigate to the project directory:
 
-2. **Set Up a Virtual Environment**
+cd ~/motor_control
 
-    ```bash
-    python3 -m venv mower_control_env
-    source mower_control_env/bin/activate
-    ```
 
-3. **Install Dependencies**
+3. Create and activate a virtual environment:
 
-    ```bash
-    pip install pygame pyserial
-    ```
+python3 -m venv mower_control_env source mower_control_env/bin/activate
 
-## Usage
 
-1. **Connect the Xbox Controller**
+4. Install the required packages:
 
-    Ensure your Xbox controller is connected to the Raspberry Pi via Bluetooth or USB.
+pip install -r requirements.txt
 
-2. **Connect the Motor Driver**
 
-    Connect the Cytron Motor Driver to the Raspberry Pi's serial port (`/dev/ttyUSB0`).
+5. Install necessary system dependencies:
 
-3. **Run the Script**
+sudo apt-get update sudo apt-get install libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev libfreetype6-dev libportmidi-dev
 
-    ```bash
-    python mower_control.py
-    ```
-
-4. **Control the Mower**
-
-    - **Left Joystick (Axis 0)**: Forward/Backward movement
-    - **Right Joystick (Axis 1)**: Left/Right steering
 
 ## Configuration
 
-### Adjusting Speed
+1. Pair your Xbox One controller with your Raspberry Pi via Bluetooth.
 
-The script includes a `SPEED_SCALE` variable to adjust the overall speed of the motors. You can modify this value to increase or decrease the speed.
+2. Connect the MDDS30 motor driver to your Raspberry Pi via USB.
 
-    ```python
-    SPEED_SCALE = 100  # Adjust this value as needed
-    ```
+3. Edit the `config.ini` file to adjust settings:
+- Set the correct serial port (usually `/dev/ttyUSB0`)
+- Adjust DEADZONE, SPEED_SCALE, and motor trim values as needed
 
-### Motor Trim
+## Usage
 
-If the motors do not run at the same speed, you can adjust the `left_trim` and `right_trim` variables to compensate.
+1. Activate the virtual environment:
 
-    ```python
-    left_trim = 0
-    right_trim = 0
-    ```
+source ~/mower_control_env/bin/activate
 
-### Deadzone
 
-The `DEADZONE` variable helps to handle joystick drift by ignoring small inputs.
+2. Run the control script:
 
-    ```python
-    DEADZONE = 0.1
-    ```
+python xbox_mdds30_control.py
+
+
+3. Use the left stick on the Xbox controller to drive the mower:
+- Up/Down for forward/reverse
+- Left/Right for steering
+
+4. Press Ctrl+C to stop the script.
 
 ## Troubleshooting
 
-- **No response from the motors**: 
-    - Ensure the serial port (`/dev/ttyUSB0`) is correct and the motor driver is properly connected.
-    - Check the connections and power supply to the motor driver.
-  
-- **Joystick not detected**: 
-    - Ensure the Xbox controller is properly connected and recognized by the Raspberry Pi.
-    - Check the device path (`/dev/input/eventX`) in the script.
+- If you encounter permission issues with the serial port, add your user to the `dialout` group:
 
-- **Motors not moving as expected**:
-    - Verify the joystick axis assignments are correct.
-    - Adjust the `SPEED_SCALE`, `left_trim`, and `right_trim` values to calibrate the motor speeds.
+sudo usermod -a -G dialout $USER
 
-## Contributing
+Log out and log back in for the changes to take effect.
 
-Contributions are welcome! Please open an issue or submit a pull request with your changes.
+- Make sure the Xbox controller is properly paired and connected before running the script.
+
+- Check that the MDDS30 is properly connected and the correct port is specified in `config.ini`.
 
 ## License
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+This project is open source and available under the [MIT License](LICENSE).
 
-## Example
+## Contributing
 
-Below is a sample of what the logging output might look like when running the script:
+Contributions to this project are welcome. Please fork the repository and submit a pull request with your changes.
 
-    ```plaintext
-    DEBUG:root:Opened serial port /dev/ttyUSB0 at 9600 baud
-    DEBUG:root:Found gamepad: Xbox Wireless Controller at /dev/input/event4
-    DEBUG:root:Entering continuous control loop. Press Ctrl-C to exit.
-    DEBUG:root:Raw Forward: 0.5, Raw Steer: -0.3
-    DEBUG:root:Processed Left Motor: 128, Processed Right Motor: 76
-    DEBUG:root:Sending command: L80 R4C
-    ...
-    ```
-
-## Support
-
-For any questions or support, please open an issue on the [GitHub repository](https://github.com/yourusername/zero-turn-mower-control/issues).
