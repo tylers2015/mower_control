@@ -1,25 +1,29 @@
 # File: kill_switch_control.py
 
 import pygame
-import serial
 import logging
+import time
+import RPi.GPIO as GPIO
 
 # Initialize Pygame (only required if this module is used independently)
 pygame.init()
 pygame.joystick.init()
 
-# Setup serial communication for the servo (assuming a different port for the servo)
-servo_serial_port = serial.Serial("/dev/ttyUSB1", 9600, timeout=0.5)
+# GPIO setup
+KILL_SWITCH_PIN = 18  # Replace with your desired GPIO pin
+GPIO.setmode(GPIO.BCM)
+GPIO.setup(KILL_SWITCH_PIN, GPIO.OUT)
 
-# Servo positions
-SERVO_ON_POSITION = 180
-SERVO_OFF_POSITION = 0
+# Setup PWM on the GPIO pin
+pwm = GPIO.PWM(KILL_SWITCH_PIN, 50)  # 50 Hz frequency
+pwm.start(0)
 
 # Joystick button index for the kill switch (B button)
 KILL_SWITCH_BUTTON = 1
 
 # Current state of the kill switch
 kill_switch_state = False
+last_button_state = False
 
 def initialize_joystick():
     joystick = pygame.joystick.Joystick(0)
@@ -28,25 +32,27 @@ def initialize_joystick():
 
 joystick = initialize_joystick()
 
-def set_servo_position(position: int) -> None:
-    # Send the position command to the servo
-    packet = bytearray([position])
-    servo_serial_port.write(packet)
-    logging.debug(f"Setting servo position: {position}")
+def set_servo_position(duty_cycle: float) -> None:
+    pwm.ChangeDutyCycle(duty_cycle)
+    logging.debug(f"Setting servo duty cycle: {duty_cycle}")
 
 def toggle_kill_switch():
     global kill_switch_state
     kill_switch_state = not kill_switch_state
-    position = SERVO_ON_POSITION if kill_switch_state else SERVO_OFF_POSITION
-    set_servo_position(position)
+    duty_cycle = 12.5 if kill_switch_state else 2.5  # Adjust these values as needed for your servo
+    set_servo_position(duty_cycle)
     logging.info(f"Kill switch {'ON' if kill_switch_state else 'OFF'}")
 
 def process_kill_switch_input() -> None:
+    global last_button_state
     pygame.event.pump()
-    if joystick.get_button(KILL_SWITCH_BUTTON):
+    button_state = joystick.get_button(KILL_SWITCH_BUTTON)
+    
+    if button_state and not last_button_state:
         toggle_kill_switch()
-        # Add a short delay to debounce the button press
-        time.sleep(0.5)
+        time.sleep(0.1)  # Adjusted debounce delay
+    
+    last_button_state = button_state
 
 if __name__ == "__main__":
     try:
@@ -55,4 +61,6 @@ if __name__ == "__main__":
             time.sleep(0.05)  # Adjust delay as needed
     except KeyboardInterrupt:
         logging.info("Exiting kill switch control.")
+        pwm.stop()
+        GPIO.cleanup()
         pass
