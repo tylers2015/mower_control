@@ -39,7 +39,7 @@ def set_servo_position(duty_cycle: float) -> None:
 def toggle_kill_switch():
     global kill_switch_state
     kill_switch_state = not kill_switch_state
-    duty_cycle = 12.5 if kill_switch_state else 2.5  # Adjust these values as needed for your servo
+    duty_cycle = 9.5 if kill_switch_state else 4  # Updated values based on your adjustments
     set_servo_position(duty_cycle)
     logging.info(f"Kill switch {'ON' if kill_switch_state else 'OFF'}")
 
@@ -53,6 +53,18 @@ def process_kill_switch_input() -> None:
         time.sleep(0.1)  # Adjusted debounce delay
     
     last_button_state = button_state
+
+def test_servo_positions():
+    try:
+        while True:
+            for duty_cycle in [4, 5, 6, 7, 8, 9, 9.5]:
+                set_servo_position(duty_cycle)
+                logging.info(f"Testing duty cycle: {duty_cycle}")
+                time.sleep(1)
+    except KeyboardInterrupt:
+        logging.info("Exiting test.")
+        pwm.stop()
+        GPIO.cleanup()
 
 if __name__ == "__main__":
     try:
