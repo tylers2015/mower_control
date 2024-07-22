@@ -107,6 +107,9 @@ def main_loop() -> None:
         logging.info("Exiting main loop.")
         # Send stop command to ensure motors are stopped
         serialPort.write(bytearray([128, 128]))  # Stop motors
+    finally:
+        kill_switch_control.pwm.stop()
+        kill_switch_control.GPIO.cleanup()
 
 if __name__ == "__main__":
     main_loop()
