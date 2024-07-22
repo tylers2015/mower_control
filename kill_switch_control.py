@@ -9,9 +9,13 @@ import RPi.GPIO as GPIO
 pygame.init()
 pygame.joystick.init()
 
+# Setup logging
+logging.basicConfig(level=logging.DEBUG)
+
 # GPIO setup
 KILL_SWITCH_PIN = 18  # Replace with your desired GPIO pin
 GPIO.setmode(GPIO.BCM)
+GPIO.setwarnings(False)  # Disable GPIO warnings
 GPIO.setup(KILL_SWITCH_PIN, GPIO.OUT)
 
 # Setup PWM on the GPIO pin
@@ -33,8 +37,8 @@ def initialize_joystick():
 joystick = initialize_joystick()
 
 def set_servo_position(duty_cycle: float) -> None:
-    pwm.ChangeDutyCycle(duty_cycle)
     logging.debug(f"Setting servo duty cycle: {duty_cycle}")
+    pwm.ChangeDutyCycle(duty_cycle)
 
 def toggle_kill_switch():
     global kill_switch_state
@@ -49,6 +53,7 @@ def process_kill_switch_input() -> None:
     button_state = joystick.get_button(KILL_SWITCH_BUTTON)
     
     if button_state and not last_button_state:
+        logging.debug("B button pressed")
         toggle_kill_switch()
         time.sleep(0.1)  # Adjusted debounce delay
     
@@ -68,6 +73,7 @@ def test_servo_positions():
 
 if __name__ == "__main__":
     try:
+        logging.info("Starting kill switch control")
         while True:
             process_kill_switch_input()
             time.sleep(0.05)  # Adjust delay as needed
