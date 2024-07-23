@@ -1,0 +1,13 @@
+[Unit]
+Description=Mower Control Service
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/bin/bash -c 'source /home/ty/mower_control_env/bin/activate && exec python /home/ty/mo>
+Restart=on-failure
+User=ty
+Environment=XDG_RUNTIME_DIR=/run/user/1000
+
+[Install]
+WantedBy=multi-user.target
