@@ -1,38 +1,36 @@
-# File: motor_control.py
-
+import os
+import logging
 import pygame
 import serial
 import time
-import logging
 from collections import deque
 from typing import Deque
-import os
-import kill_switch_control  # Importing the kill switch control module
+import kill_switch_control
 
 # Define constants
-MOTOR_SERIAL_PORT = '/dev/ttyUSB0'  # Update with the correct serial port
+MOTOR_SERIAL_PORT = '/dev/serial0'  # Using built-in UART
 BAUD_RATE = 9600
 
 # Initialize Pygame and joystick
 pygame.init()
 pygame.joystick.init()
 
-# Setup serial communication
-serialPort = serial.Serial(MOTOR_SERIAL_PORT, BAUD_RATE, timeout=0.5)
-
 # Logging setup
-logging.basicConfig(filename='mower_control.log', level=logging.DEBUG, 
+logging.basicConfig(filename='/home/ty/motor_control/mower_control.log', level=logging.DEBUG, 
                     format='%(asctime)s - %(levelname)s - %(message)s')
 
-# Check for joystick availability
-joystick_count = pygame.joystick.get_count()
-if joystick_count > 0:
-    joystick = pygame.joystick.Joystick(0)
-    joystick.init()
-    logging.info(f"Joystick initialized: {joystick.get_name()}")
-else:
-    logging.error("No joysticks found. Exiting.")
-    exit(1)
+logging.info("Starting motor control script")
+
+def initialize_joystick():
+    joystick_count = pygame.joystick.get_count()
+    if joystick_count > 0:
+        joystick = pygame.joystick.Joystick(0)
+        joystick.init()
+        logging.info(f"Joystick initialized: {joystick.get_name()}")
+        return joystick
+    else:
+        logging.error("No joysticks found. Waiting for joystick connection...")
+        return None
 
 # Motor control variables
 motor_left = 0
@@ -46,7 +44,7 @@ LEFT_TRIM = 0
 RIGHT_TRIM = 0
 
 # Speed scaling factor to reduce speed
-SPEED_SCALE = 70  # Reduced value to decrease speed
+SPEED_SCALE = 70
 
 # Moving average filter parameters
 FILTER_SIZE = 3
@@ -54,8 +52,8 @@ forward_history: Deque[float] = deque([0] * FILTER_SIZE, maxlen=FILTER_SIZE)
 steer_history: Deque[float] = deque([0] * FILTER_SIZE, maxlen=FILTER_SIZE)
 
 # Button constants
-VIEW_BUTTON = 10  # Button index for shutdown
-SHUTDOWN_HOLD_TIME = 3  # Time in seconds to hold the button for shutdown
+VIEW_BUTTON = 10
+SHUTDOWN_HOLD_TIME = 3
 
 def apply_deadzone(value: float, deadzone: float) -> float:
     return 0 if abs(value) < deadzone else value
@@ -66,23 +64,27 @@ def moving_average(history: Deque[float]) -> float:
 def reset_motors(serial_port) -> None:
     logging.info("Resetting motors.")
     try:
-        send_motor_command(serial_port, 0, 0, 0)  # Motor Left
-        send_motor_command(serial_port, 1, 0, 0)  # Motor Right
+        send_motor_command(serial_port, 0, 0, 0)
+        send_motor_command(serial_port, 1, 0, 0)
         logging.info("Motors reset successfully.")
     except serial.SerialException as e:
         logging.error(f"Failed to reset motors: {e}")
 
 def send_motor_command(serial_port, motor, direction, speed):
     command = ((motor << 7) | (direction << 6) | speed) & 0xFF
-    serial_port.write(bytes([command]))
+    try:
+        serial_port.write(bytes([command]))
+        logging.debug(f'Sent command to motor {motor}: direction={direction}, speed={speed}')
+    except serial.SerialException as e:
+        logging.error(f"Failed to send command to motor {motor}: {e}")
 
-def process_joystick_input() -> None:
+def process_joystick_input(joystick) -> None:
     global motor_left, motor_right
 
     pygame.event.pump()
     
-    forward = joystick.get_axis(0)  # Forward/backward control
-    steer = joystick.get_axis(1)    # Left/right control
+    forward = joystick.get_axis(0)
+    steer = joystick.get_axis(1)
     
     logging.debug(f"Joystick axis - Forward: {forward}, Steer: {steer}")
     
@@ -99,11 +101,9 @@ def process_joystick_input() -> None:
     
     logging.debug(f"Moving average - Forward: {avg_forward}, Steer: {avg_steer}")
     
-    # Calculate motor speeds for zero-turn steering with increased speed
     left_speed = (avg_forward + avg_steer) * SPEED_SCALE + LEFT_TRIM
     right_speed = (avg_forward - avg_steer) * SPEED_SCALE + RIGHT_TRIM
     
-    # Normalize motor speeds
     left_speed = max(min(left_speed, 63), -63)
     right_speed = max(min(right_speed, 63), -63)
     
@@ -111,14 +111,14 @@ def process_joystick_input() -> None:
     motor_right = int(abs(right_speed)) & 63
     
     if left_speed < 0:
-        motor_left |= 64  # Reverse bit for left motor
+        motor_left |= 64
     else:
-        motor_left &= 63  # Forward for left motor
+        motor_left &= 63
         
     if right_speed < 0:
-        motor_right |= 192  # Reverse bit for right motor
+        motor_right |= 192
     else:
-        motor_right |= 128  # Forward for right motor
+        motor_right |= 128
     
     logging.debug(f"Processed Left Motor: {motor_left}, Processed Right Motor: {motor_right}")
     
@@ -129,19 +129,43 @@ def shutdown_pi() -> None:
     logging.info("Shutting down Raspberry Pi.")
     os.system("sudo shutdown -h now")
 
+def initialize_serial_port(port, baud_rate, retries=5, delay=5):
+    for attempt in range(retries):
+        try:
+            ser = serial.Serial(port, baud_rate, timeout=0.5)
+            logging.info(f"Successfully initialized serial port {port}")
+            return ser
+        except serial.SerialException as e:
+            logging.error(f"Attempt {attempt + 1} - Failed to initialize serial port {port}: {e}")
+            time.sleep(delay)
+    logging.error(f"Failed to initialize serial port {port} after {retries} attempts")
+    return None
+
 def main_loop() -> None:
     logging.info("Starting main loop. Move joystick to test.")
     view_button_pressed_time = None
 
-    # Reset motors at startup
+    global serialPort
+    serialPort = initialize_serial_port(MOTOR_SERIAL_PORT, BAUD_RATE)
+
+    if serialPort is None:
+        logging.error("Exiting due to failure in initializing motor serial port")
+        exit(1)
+
     reset_motors(serialPort)
+
+    joystick = initialize_joystick()
 
     try:
         while True:
-            process_joystick_input()
-            kill_switch_control.process_kill_switch_input()  # Process kill switch input
+            if joystick is None:
+                joystick = initialize_joystick()
+                time.sleep(1)
+                continue
 
-            # Check the view button state
+            process_joystick_input(joystick)
+            kill_switch_control.process_kill_switch_input()
+
             view_button_state = joystick.get_button(VIEW_BUTTON)
             logging.debug(f"View button state: {view_button_state}")
 
@@ -160,11 +184,10 @@ def main_loop() -> None:
                     logging.debug("View button released.")
                 view_button_pressed_time = None
 
-            time.sleep(0.05)  # Reduced delay to improve responsiveness
+            time.sleep(0.05)
     except KeyboardInterrupt:
         logging.info("Exiting main loop.")
-        # Send stop command to ensure motors are stopped
-        serialPort.write(bytearray([128, 128]))  # Stop motors
+        serialPort.write(bytearray([128, 128]))
     finally:
         kill_switch_control.pwm.stop()
         kill_switch_control.GPIO.cleanup()
