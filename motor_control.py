@@ -152,7 +152,12 @@ def main_loop() -> None:
         logging.error("Exiting due to failure in initializing motor serial port")
         exit(1)
 
+    # Stop the motors at startup
     reset_motors(serialPort)
+
+    # Ensure motors are stopped
+    motor_left = 0
+    motor_right = 0
 
     joystick = initialize_joystick()
 
