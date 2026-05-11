@@ -37,7 +37,7 @@ motor_left = 0
 motor_right = 0
 
 # Calibration threshold to handle joystick drift
-DEADZONE = 0.1
+DEADZONE = 0.18
 
 # Motor trim adjustments
 LEFT_TRIM = 0
@@ -47,7 +47,7 @@ RIGHT_TRIM = 0
 SPEED_SCALE = 70
 
 # Moving average filter parameters
-FILTER_SIZE = 3
+FILTER_SIZE = 6
 forward_history: Deque[float] = deque([0] * FILTER_SIZE, maxlen=FILTER_SIZE)
 steer_history: Deque[float] = deque([0] * FILTER_SIZE, maxlen=FILTER_SIZE)
 
